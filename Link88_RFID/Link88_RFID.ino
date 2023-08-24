@@ -7,6 +7,7 @@
 //11:Tag_IDの取得をポインタとする
 //12:RFID Debug Mode追加 シリアル出力をTextから、バイナリへ
 //13:Tag⇒CanBusへ送信テスト、Link88の基本情報などをヘッダーファイル化に分けた。⇒git can_rfid 初版
+//Git can_rfid RFIDデバック確認モード追加,SERIAL出力をASCIIとバイナリを選択式に
 /**************************************************************************************
  * INCLUDE
  **************************************************************************************/
@@ -26,6 +27,9 @@
 #define button02 17
 #define button03 18
 #define button04 19
+
+#define rfid_debug  //rfidをデバックする時にコメントを外す。
+#define id_ascii    //rfidの出力をASCIIにする。コメントアウト時は、バイナリー出力
 
 /**************************************************************************************
  * SETUP/LOOP
@@ -59,9 +63,9 @@ unsigned char tag_id[5], recive_data[50];
 
 int rfid_read(unsigned char *p_tag, int Debug_mode) {
   /*******************************
-    RFID Reader
+    Sub RFID Reader
   *******************************/
-  int ret = 0;
+  int ret = 0;  //1<:TagID取得　-1>:エラー
 
   cnt = Serial1.available();
   if (cnt == 30) {
@@ -69,36 +73,25 @@ int rfid_read(unsigned char *p_tag, int Debug_mode) {
 
     digitalWrite(LED_G, HIGH);
 
-    if (Debug_mode) {
-      for (int i = 0; i < 5; i++) {
-        Serial.print(*(p_tag + i));
-        Serial.print(" ");
-      }
-
-      Serial.print("Get RFID:cnt[");
-      Serial.print(cnt);
-      Serial.print("]:");
-    }
-
     for (int ii = 0; ii < 30; ii++) {
       inByte = Serial1.read();
       if (inByte != -1) {
-        if (Debug_mode) {
+#ifdef rfid_debug
+        Serial.print(" ");
+        Serial.print(inByte, HEX);
+#endif
+        recive_data[ii] = inByte;
 
-          Serial.print(" ");
-          Serial.print(inByte, HEX);
-          recive_data[ii] = inByte;
-        }
         switch (ii) {
           case 0:
             if (recive_data[ii] == 0x02) {
-              if (Debug_mode) {
-                Serial.print(" Start Code OK [");
-              }
+#ifdef rfid_debug
+              Serial.print(" Start Code OK [");
+#endif
             } else {
-              if (Debug_mode) {
-                Serial.println(" Start Code Not:02 Error!!!");
-              }
+#ifdef rfid_debug
+              Serial.println(" Start Code Not:02 Error!!!");
+#endif
               digitalWrite(LED_R, HIGH);
               ret = -1;
             }
@@ -134,47 +127,46 @@ int rfid_read(unsigned char *p_tag, int Debug_mode) {
             } else {
               *(p_tag + id_index) = (recive_data[ii] - '0') * 0x10 + *(p_tag + id_index);
             }
-            if (Debug_mode) {
-              Serial.print("]");
-            }
+#ifdef rfid_debug
+            Serial.print("]");
+#endif
             break;
           case 27:
             crc = recive_data[ii];
             break;
           case 28:
             if (crc + recive_data[ii] == 0xFF) {
-              if (Debug_mode) {
-                Serial.print(" CRC OK");
-              }
+#ifdef rfid_debug
+              Serial.print(" CRC OK");
+#endif
             } else {
               digitalWrite(LED_R, HIGH);  //受信異常
-              if (Debug_mode) {
-                Serial.println(" CRC ERROR!!:");
-                Serial.print(crc + recive_data[ii]);
-              }
+#ifdef rfid_debug
+              Serial.println(" CRC ERROR!!:");
+              Serial.print(crc + recive_data[ii]);
+#endif
               ret = -2;
             }
             break;
           case 29:
             if (recive_data[ii] == 0x03) {
-              if (Debug_mode) {
-                Serial.println(" End Code OK");
-                /*取得Tag表示
+#ifdef rfid_debug
+              Serial.println(" End Code OK");
+              //取得Tag表示
               Serial.print("Tag:");
-              for(int ii = 0; ii<10; ii++) {
+              for (int ii = 0; ii < 10; ii++) {
                 Serial.print(" ");
-                Serial.print(tag_id[ii],HEX);
+                Serial.print(tag_id[ii], HEX);
               }
               Serial.println("");
-              */
-              }
+#endif
               digitalWrite(LED_R, LOW);  //受信正常
               ret = 1;
             } else {
               digitalWrite(LED_R, HIGH);  //受信異常
-              if (Debug_mode) {
-                Serial.println(" End Code Not:03 Error!!!");
-              }
+#ifdef rfid_debug
+              Serial.println(" End Code Not:03 Error!!!");
+#endif
               ret = -3;
             }
             break;
@@ -182,9 +174,9 @@ int rfid_read(unsigned char *p_tag, int Debug_mode) {
         if (ret < 0) break;
 
       } else {  //読込終了？エラー これはないはず。
-        if (Debug_mode) {
-          Serial.println(" Read Error!");
-        }
+#ifdef rfid_debug
+        Serial.println(" Read Error!");
+#endif
         ret = -99;
         break;
       }
@@ -200,11 +192,11 @@ int rfid_read(unsigned char *p_tag, int Debug_mode) {
           digitalWrite(LED_G, HIGH);
           while (Serial1.read() != -1) {}
           timeup = 0;
-          if (Debug_mode) {
-            Serial.print("cnt:");
-            Serial.print(cnt);
-            Serial.println(" Timeup");
-          }
+#ifdef rfid_debug
+          Serial.print("cnt:");
+          Serial.print(cnt);
+          Serial.println(" Timeup");
+#endif
         }
       } else {
         cnt_temp = cnt;
@@ -353,14 +345,15 @@ void loop() {
   }    //if (CAN.available())　END
 
 
-
-
   /*********************************************
     RFID Read
      rfid_read(*p_tag,Debug_mode)  p_tagに5byteのIDを入れる。 
   *********************************************/
-//  if (mode == 10 && CanWrite != 1) {
+#ifdef rfid_debug
   if (CanWrite != 1) {
+#else
+  if (mode == 10 && CanWrite != 1) {
+#endif
 
     unsigned long rfid_ret = rfid_read(&tag_id[0], -1);
 
@@ -368,14 +361,18 @@ void loop() {
       //Tag所得
       Serial.print("Tag:");
       for (int ii = 0; ii < 5; ii++) {
-        Serial.print(tag_id[ii], HEX);
-        //Serial.write(tag_id[ii]);  //バイナリーデータ送信
+#ifdef id_ascii
+        Serial.print(tag_id[ii], HEX);  //HEXでASCII出力
         Serial.write(" ");
-        //Serial.print("/n");
+#else
+        Serial.write(tag_id[ii]);  //バイナリーデータ送信
+#endif
       }
       Serial.println("");
-//      mode = 100;
-//      CanWrite = 1;
+#ifndef rfid_debug
+      mode = 100;
+      CanWrite = 1;
+#endif
     }
     if (rfid_ret < 0) {
       //Tag取得エラー
@@ -544,8 +541,6 @@ void loop() {
         mode = 10;
         CanWrite = 0;
       }
-
-
     }
 
     if (mode >= 1000) {
