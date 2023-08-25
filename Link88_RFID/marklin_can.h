@@ -1,7 +1,7 @@
 #ifndef MARKLIN_CAN_H
 #define MARKLIN_CAN_H
 //------------------------------------------------
-
+//https://monozukuri-c.com/langc-file/   参考
 //------------------------------------------------
 //  マクロ定義(Macro definition)
 //------------------------------------------------
@@ -11,6 +11,7 @@
 //------------------------------------------------
 uint8_t const uid[] = { 0x53, 0x38, 0x3B, 0x99 };
 unsigned int const hash_ar88 = 0x4721;
+uint8_t const reader_id = 1;
 
 //                    [index][row][]
 uint8_t const L88_DATA[0x0D][8][8] = {                              //

@@ -8,6 +8,7 @@
 //12:RFID Debug Mode追加 シリアル出力をTextから、バイナリへ
 //13:Tag⇒CanBusへ送信テスト、Link88の基本情報などをヘッダーファイル化に分けた。⇒git can_rfid 初版
 //Git can_rfid RFIDデバック確認モード追加,SERIAL出力をASCIIとバイナリを選択式に
+//Git can_rfid Can Cmd0x77を送信（TagID 5byte + ReaderID 1byte + rfid_wait_cnt 2byte）
 /**************************************************************************************
  * INCLUDE
  **************************************************************************************/
@@ -18,7 +19,6 @@
 /**************************************************************************************
  * define
  **************************************************************************************/
-//#define Active_Cmd  0x16
 #define Out01 D6
 #define Out02 D7
 #define LED_R D6
@@ -39,6 +39,7 @@
 //uint8_t const uid[] = { 0x53, 0x38, 0x3B, 0x99 };
 //unsigned int const hash_ar88 = 0x4721;
 //uint8_t msg_data[8];
+
 uint8_t id;
 unsigned int hash_cs = 0x0000;
 unsigned int mode = 0, CanWrite = 0;
@@ -58,6 +59,7 @@ Tag_Lok TagLok_Data[10];
 
 uint8_t inByte = 0;
 int cnt = 0, cnt_temp = 0, timeup = 0, crc;
+unsigned int rfid_wait_cnt = 0;
 //uint8_t recive_data[50], tag_id[5];
 unsigned char tag_id[5], recive_data[50];
 
@@ -151,7 +153,6 @@ int rfid_read(unsigned char *p_tag, int Debug_mode) {
           case 29:
             if (recive_data[ii] == 0x03) {
 #ifdef rfid_debug
-              Serial.println(" End Code OK");
               //取得Tag表示
               Serial.print("Tag:");
               for (int ii = 0; ii < 10; ii++) {
@@ -345,10 +346,10 @@ void loop() {
   }    //if (CAN.available())　END
 
 
-  /*********************************************
+  /********************************************************
     RFID Read
      rfid_read(*p_tag,Debug_mode)  p_tagに5byteのIDを入れる。 
-  *********************************************/
+  ********************************************************/
 #ifdef rfid_debug
   if (CanWrite != 1) {
 #else
@@ -368,16 +369,21 @@ void loop() {
         Serial.write(tag_id[ii]);  //バイナリーデータ送信
 #endif
       }
-      Serial.println("");
+      rfid_wait_cnt = 0;
 #ifndef rfid_debug
+      Serial.println("");
       mode = 100;
       CanWrite = 1;
 #endif
-    }
-    if (rfid_ret < 0) {
-      //Tag取得エラー
-      Serial.print("RFID READ ERROR!!!:Code:");
-      Serial.println(rfid_ret);
+    } else {
+      if (rfid_ret = 0) {   //rfidの読込が無い時,待ち時間をカウントUP
+        if (rfid_wait_cnt++ == 0) rfid_wait_cnt = 0xFFFF;
+      } else {
+        //Tag取得エラー
+        Serial.print("RFID READ ERROR!!!:Code:");
+        Serial.println(rfid_ret);
+        rfid_wait_cnt = 0;
+      }
     }
   }
 
@@ -415,7 +421,6 @@ void loop() {
   /*************************
   // Can Write(Send)
   *************************/
-
   while (CanWrite == 1) {
     //Cmd0x37 Bootloader応答
     if (mode == 1) {
@@ -524,10 +529,10 @@ void loop() {
       }
     }
 
+    //Cmd:0x77を拡張 Tag_idを送信
     if (mode == 100) {
-
       CAN_ID = 0x00770000 + hash_ar88;
-      uint8_t msg_data[] = { tag_id[0], tag_id[1], tag_id[2], tag_id[3], tag_id[4] };
+      uint8_t msg_data[] = { tag_id[0], tag_id[1], tag_id[2], tag_id[3], tag_id[4], reader_id, uint8_t(rfid_wait_cnt>>8), uint8_t(rfid_wait_cnt & 0xff) };
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
       if (int const rc = CAN.write(send_msg); rc < 0) {
         Serial.print("Cmd:0x77_[END] CAN.write(...) failed with error code ");
@@ -543,6 +548,7 @@ void loop() {
       }
     }
 
+    // デバイス構成を連続送信
     if (mode >= 1000) {
       int index = int((mode - 1000) / 10);
       int paket_no = mode % 10;
