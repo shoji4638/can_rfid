@@ -8,7 +8,7 @@
 //12:RFID Debug Mode追加 シリアル出力をTextから、バイナリへ
 //13:Tag⇒CanBusへ送信テスト、Link88の基本情報などをヘッダーファイル化に分けた。⇒git can_rfid 初版
 //Git can_rfid RFIDデバック確認モード追加,SERIAL出力をASCIIとバイナリを選択式に
-//Git can_rfid Can Cmd0x77を送信（TagID 5byte + ReaderID 1byte + rfid_wait_cnt 2byte）
+//Git can_rfid Can Cmd0x77を送信（TagID 5byte + ReaderID 1byte + rfid_wait_cnt 2byte】PCでCan受信確認OK
 /**************************************************************************************
  * INCLUDE
  **************************************************************************************/
@@ -28,7 +28,7 @@
 #define button03 18
 #define button04 19
 
-#define rfid_debug  //rfidをデバックする時にコメントを外す。
+//#define rfid_debug  //rfidをデバックする時にコメントを外す。
 #define id_ascii    //rfidの出力をASCIIにする。コメントアウト時は、バイナリー出力
 
 /**************************************************************************************
@@ -369,14 +369,13 @@ void loop() {
         Serial.write(tag_id[ii]);  //バイナリーデータ送信
 #endif
       }
-      rfid_wait_cnt = 0;
 #ifndef rfid_debug
       Serial.println("");
       mode = 100;
       CanWrite = 1;
 #endif
     } else {
-      if (rfid_ret = 0) {   //rfidの読込が無い時,待ち時間をカウントUP
+      if (rfid_ret ==                                                                                                                                                                                                                                                                                  0) {   //rfidの読込が無い時,待ち時間をカウントUP
         if (rfid_wait_cnt++ == 0) rfid_wait_cnt = 0xFFFF;
       } else {
         //Tag取得エラー
@@ -543,6 +542,9 @@ void loop() {
       } else {
         Serial.print("Cmd:0x77 MODE:");
         Serial.print(mode);
+        Serial.print(" Rfid Wait Cnt=");
+        Serial.println(rfid_wait_cnt);
+        rfid_wait_cnt = 0;
         mode = 10;
         CanWrite = 0;
       }
