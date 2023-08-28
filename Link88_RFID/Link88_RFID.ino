@@ -14,7 +14,7 @@
  **************************************************************************************/
 
 #include <Arduino_CAN.h>
-#include "marklin_can_V2.h"
+//#include "marklin_can_V2.h"
 
 /**************************************************************************************
  * define
@@ -30,7 +30,6 @@
 
 //#define rfid_debug  //rfidをデバックする時にコメントを外す。
 #define id_ascii  //rfidの出力をASCIIにする。コメントアウト時は、バイナリー出力
-
 
 /***********
 Class
@@ -221,7 +220,7 @@ arduinoL88 ar88_0;
 //uint8_t msg_data[8];
 
 uint8_t id;
-unsigned int hash_cs = 0x0000;
+unsigned int hash_cs = 0x0000,hash_ar88 = 0x0000;
 unsigned int CanWrite = 0;
 uint32_t CAN_ID;
 
@@ -237,7 +236,7 @@ struct Tag_Lok {
 
 Tag_Lok TagLok_Data[10];
 
-uint8_t inByte = 0;
+uint8_t inByte = 0,reader_id = 0;
 int cnt = 0, cnt_temp = 0, timeup = 0, crc;
 unsigned int rfid_wait_cnt = 0;
 //uint8_t recive_data[50], tag_id[5];
@@ -406,8 +405,9 @@ void setup() {
   digitalWrite(LED_G, HIGH);
 
   //  ar88_0.uid = {0x42,0x6F,0x4C,0x88};
+  hash_ar88 = ar88_0.hash_cal();
   Serial.print("Calss cal HASH:");
-  Serial.print(ar88_0.hash_cal());
+  Serial.println(hash_ar88);
 
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(Out01, OUTPUT);
@@ -473,7 +473,7 @@ void loop() {
 
       case 4:
         //？動かない⇒間違い
-        if (cmd == 0x00 && msg.data[4] == 0x0C && msg.data_length == 7 && msg.data[0] == uid[0] && msg.data[1] == uid[1] && msg.data[2] == uid[2] && msg.data[3] == uid[3]) {
+        if (cmd == 0x00 && msg.data[4] == 0x0C && msg.data_length == 7 && msg.data[0] == ar88_0.uid[0] && msg.data[1] == ar88_0.uid[1] && msg.data[2] == ar88_0.uid[2] && msg.data[3] == ar88_0.uid[3]) {
           ar88_0.mode = 5;
           CanWrite = 1;
           id = msg.data[5] * 0x100 + msg.data[6];
@@ -492,7 +492,7 @@ void loop() {
           Serial.println("Mode 10->11: Cmd 0x30(R) Ping Receive:");
         }
         //Cmd 0x3A（ステータス要求）受信
-        if (cmd == 0x3A && msg.data_length == 5 && uid[0] == msg.data[0] && uid[1] == msg.data[1] && uid[2] == msg.data[2] && uid[3] == msg.data[3]) {
+        if (cmd == 0x3A && msg.data_length == 5 && ar88_0.uid[0] == msg.data[0] && ar88_0.uid[1] == msg.data[1] && ar88_0.uid[2] == msg.data[2] && ar88_0.uid[3] == msg.data[3]) {
           ar88_0.mode = 1000 + msg.data[4] * 10;  //mode = 1000 + index*10
           CanWrite = 1;
           Serial.print("Cmd=3A:Status Request mode:");
@@ -516,7 +516,7 @@ void loop() {
         }
   */
         //Cmd 0x00 SubCmd0x0B 受信
-        if (cmd == 0x00 && msg.data[4] == 0x0B && uid[0] == msg.data[0] && uid[1] == msg.data[1] && uid[2] == msg.data[2] && uid[3] == msg.data[3]) {
+        if (cmd == 0x00 && msg.data[4] == 0x0B && ar88_0.uid[0] == msg.data[0] && ar88_0.uid[1] == msg.data[1] && ar88_0.uid[2] == msg.data[2] && ar88_0.uid[3] == msg.data[3]) {
           ar88_0.mode = 13;
           CanWrite = 1;
           id = msg.data[6];
@@ -614,7 +614,7 @@ void loop() {
     if (ar88_0.mode == 1) {
       CAN_ID = 0x00370000 + hash_ar88;
       //BootLoader返信　　（UID 4byte,バージョン:1.1,機種:0040(Link88)）
-      uint8_t msg_data[] = { uid[0], uid[1], uid[2], uid[3], 0x01, 0x01, 0x00, 0x40 };
+      uint8_t msg_data[] = { ar88_0.uid[0], ar88_0.uid[1], ar88_0.uid[2], ar88_0.uid[3], 0x01, 0x01, 0x00, 0x40 };
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
 
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -633,7 +633,7 @@ void loop() {
     if (ar88_0.mode == 3) {
       CAN_ID = 0x00310000 + hash_ar88;
       //Ping返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
-      uint8_t msg_data[] = { uid[0], uid[1], uid[2], uid[3], 0x01, 0x01, 0x00, 0x40 };
+      uint8_t msg_data[] = { ar88_0.uid[0], ar88_0.uid[1], ar88_0.uid[2], ar88_0.uid[3], 0x01, 0x01, 0x00, 0x40 };
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
 
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -654,7 +654,7 @@ void loop() {
       CAN_ID = 0x00010000 + hash_cs;
       //ID返信            （UID 4byte,SubCmd 0x0C,0x00,確認ID）
       //uint8_t msg_data[] = {uid[0],uid[1],uid[2],uid[3],0x0C,0x00,uid[3]}; CS2?
-      uint8_t msg_data[] = { uid[0], uid[1], uid[2], uid[3], 0x0C, 0x00, 0x03 };
+      uint8_t msg_data[] = { ar88_0.uid[0], ar88_0.uid[1], ar88_0.uid[2], ar88_0.uid[3], 0x0C, 0x00, 0x03 };
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
 
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -676,7 +676,7 @@ void loop() {
       //Cmd 0x31 Ping返信
       CAN_ID = 0x00310000 + hash_ar88;
       //Ping返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
-      uint8_t msg_data[] = { uid[0], uid[1], uid[2], uid[3], 0x01, 0x01, 0x00, 0x40 };  //BootLoader返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
+      uint8_t msg_data[] = { ar88_0.uid[0], ar88_0.uid[1], ar88_0.uid[2], ar88_0.uid[3], 0x01, 0x01, 0x00, 0x40 };  //BootLoader返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
 
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -699,7 +699,7 @@ void loop() {
       //
       CAN_ID = 0x00010000 + hash_cs;
       //uint8_t const msg_data[] = {0x53,0x38,0x39,0x99,0x01,0x00,0x00,0x40}; //BootLoader返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
-      uint8_t msg_data[] = { uid[0], uid[1], uid[2], uid[3], 0x0B, 0x03, 0x01 };
+      uint8_t msg_data[] = { ar88_0.uid[0], ar88_0.uid[1], ar88_0.uid[2], ar88_0.uid[3], 0x0B, 0x03, 0x01 };
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
 
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -743,13 +743,13 @@ void loop() {
     if (ar88_0.mode >= 1000) {
       int index = int((ar88_0.mode - 1000) / 10);
       int paket_no = ar88_0.mode % 10;
-      while (L88_DATA[index][paket_no][2] != uid[2] or L88_DATA[index][paket_no][3] != uid[3]) {
+      while (ar88_0.L88_DATA[index][paket_no][2] != ar88_0.uid[2] or ar88_0.L88_DATA[index][paket_no][3] != ar88_0.uid[3]) {
         //msg=0x003B0301+paket_no, dlc=8, data=L88_DATA[index][paket_no][0:8])
         CAN_ID = 0x003B0301 + paket_no;
-        uint8_t msg_data[] = { L88_DATA[index][paket_no][0], L88_DATA[index][paket_no][1],
-                               L88_DATA[index][paket_no][2], L88_DATA[index][paket_no][3],
-                               L88_DATA[index][paket_no][4], L88_DATA[index][paket_no][5],
-                               L88_DATA[index][paket_no][6], L88_DATA[index][paket_no][7] };
+        uint8_t msg_data[] = { ar88_0.L88_DATA[index][paket_no][0], ar88_0.L88_DATA[index][paket_no][1],
+                               ar88_0.L88_DATA[index][paket_no][2], ar88_0.L88_DATA[index][paket_no][3],
+                               ar88_0.L88_DATA[index][paket_no][4], ar88_0.L88_DATA[index][paket_no][5],
+                               ar88_0.L88_DATA[index][paket_no][6], ar88_0.L88_DATA[index][paket_no][7] };
         //memcpy((void *)(msg_data + 4), &msg_cnt, sizeof(msg_cnt));
         CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
         if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -766,14 +766,14 @@ void loop() {
           Serial.print(" paket_no");
           Serial.print(paket_no);
           Serial.print(" Data:");
-          Serial.print(L88_DATA[index][paket_no][0]);
-          Serial.print(L88_DATA[index][paket_no][1]);
-          Serial.print(L88_DATA[index][paket_no][2]);
-          Serial.print(L88_DATA[index][paket_no][3]);
-          Serial.print(L88_DATA[index][paket_no][4]);
-          Serial.print(L88_DATA[index][paket_no][5]);
-          Serial.print(L88_DATA[index][paket_no][6]);
-          Serial.println(L88_DATA[index][paket_no][7]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][0]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][1]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][2]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][3]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][4]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][5]);
+          Serial.print(ar88_0.L88_DATA[index][paket_no][6]);
+          Serial.println(ar88_0.L88_DATA[index][paket_no][7]);
 
           ar88_0.mode = ar88_0.mode + 1;
           index = int((ar88_0.mode - 1000) / 10);
@@ -782,9 +782,9 @@ void loop() {
       }
       CAN_ID = 0x003B0000 + hash_ar88;
       //  uint8_t const msg_data[] = {0x53,0x38,0x39,0x99,0x01,0x00,0x00,0x40}; //BootLoader返信（UID 4byte,SWバージョン:0100,機種:0040(Link88)）
-      uint8_t msg_data[] = { L88_DATA[index][paket_no][0], L88_DATA[index][paket_no][1],
-                             L88_DATA[index][paket_no][2], L88_DATA[index][paket_no][3],
-                             L88_DATA[index][paket_no][4], L88_DATA[index][paket_no][5] };
+      uint8_t msg_data[] = { ar88_0.L88_DATA[index][paket_no][0], ar88_0.L88_DATA[index][paket_no][1],
+                             ar88_0.L88_DATA[index][paket_no][2], ar88_0.L88_DATA[index][paket_no][3],
+                             ar88_0.L88_DATA[index][paket_no][4], ar88_0.L88_DATA[index][paket_no][5] };
       //          memcpy((void *)(msg_data + 4), &msg_cnt, sizeof(msg_cnt));
       CanMsg send_msg(CAN_ID, sizeof(msg_data), msg_data);
       if (int const rc = CAN.write(send_msg); rc < 0) {
@@ -798,12 +798,12 @@ void loop() {
         Serial.print(ar88_0.mode);
         Serial.print(index);
         Serial.print(paket_no);
-        Serial.print(L88_DATA[index][paket_no][0]);
-        Serial.print(L88_DATA[index][paket_no][1]);
-        Serial.print(L88_DATA[index][paket_no][2]);
-        Serial.print(L88_DATA[index][paket_no][3]);
-        Serial.print(L88_DATA[index][paket_no][4]);
-        Serial.println(L88_DATA[index][paket_no][5]);
+        Serial.print(ar88_0.L88_DATA[index][paket_no][0]);
+        Serial.print(ar88_0.L88_DATA[index][paket_no][1]);
+        Serial.print(ar88_0.L88_DATA[index][paket_no][2]);
+        Serial.print(ar88_0.L88_DATA[index][paket_no][3]);
+        Serial.print(ar88_0.L88_DATA[index][paket_no][4]);
+        Serial.println(ar88_0.L88_DATA[index][paket_no][5]);
         Serial.println(" Cmd:0x3B_[END] Send Done!");
         ar88_0.mode = 10;
         CanWrite = 0;
